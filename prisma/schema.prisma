@@ -1,0 +1,494 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== 用户相关 ====================
+
+enum UserRole {
+  CUSTOMER
+  DEVELOPER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?   // 仅邮箱注册用户使用
+  name          String?
+  image         String?
+  role          UserRole  @default(CUSTOMER)
+  status        UserStatus @default(PENDING_VERIFICATION)
+  
+  // 开发者资料
+  developerProfile DeveloperProfile?
+  
+  // 客户资料
+  customerProfile CustomerProfile?
+  
+  // OAuth 账户
+  accounts      Account[]
+  sessions      Session[]
+  
+  // Skills (开发者创建)
+  skills        Skill[]
+  
+  // 购买记录
+  purchases     Purchase[]
+  
+  // 订阅
+  subscriptions Subscription[]
+  
+  // API Keys
+  apiKeys       ApiKey[]
+  
+  // 评价
+  reviews       Review[]
+  
+  // 支付相关
+  payouts       Payout[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// 开发者资料
+model DeveloperProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  displayName String?
+  bio         String?  @db.Text
+  website     String?
+  github      String?
+  twitter     String?
+  company     String?
+  
+  // 统计数据
+  totalSkills      Int @default(0)
+  totalRevenue     Decimal @default(0) @db.Decimal(10, 2)
+  totalDownloads   Int @default(0)
+  averageRating    Decimal @default(0) @db.Decimal(2, 1)
+  
+  // Stripe 连接账户
+  stripeAccountId  String?
+  
+  // 支付设置
+  payoutMethod     String? // bank_transfer, paypal
+  payoutEmail      String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("developer_profiles")
+}
+
+// 客户资料
+model CustomerProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  company     String?
+  jobTitle    String?
+  industry    String?
+  
+  // 使用统计
+  totalSpent       Decimal @default(0) @db.Decimal(10, 2)
+  totalApiCalls    Int @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("customer_profiles")
+}
+
+// ==================== Skills 相关 ====================
+
+enum SkillStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  PUBLISHED
+  SUSPENDED
+  ARCHIVED
+}
+
+enum PricingType {
+  FREE
+  ONE_TIME
+  SUBSCRIPTION
+}
+
+model Skill {
+  id          String   @id @default(cuid())
+  
+  // 基础信息
+  name        String
+  slug        String   @unique
+  description String   @db.Text
+  shortDescription String @db.VarChar(255)
+  
+  // 媒体
+  logo        String?
+  screenshots String[]
+  videoUrl    String?
+  
+  // 分类
+  categoryId  String
+  category    SkillCategory @relation(fields: [categoryId], references: [id])
+  tags        SkillTag[]
+  
+  // 开发者
+  developerId String
+  developer   User     @relation(fields: [developerId], references: [id], onDelete: Cascade)
+  
+  // 状态
+  status      SkillStatus @default(DRAFT)
+  
+  // 定价
+  pricingType PricingType @default(FREE)
+  price       Decimal @default(0) @db.Decimal(10, 2)
+  subscriptionPrice Decimal? @db.Decimal(10, 2)
+  subscriptionInterval String? // month, year
+  
+  // API 配置
+  apiEndpoint String?
+  apiVersion  String @default("v1")
+  
+  // 文档
+  documentation String? @db.Text
+  readme        String? @db.Text
+  
+  // 统计
+  downloadCount    Int @default(0)
+  viewCount        Int @default(0)
+  averageRating    Decimal @default(0) @db.Decimal(2, 1)
+  reviewCount      Int @default(0)
+  
+  // 版本
+  currentVersion   String @default("1.0.0")
+  versions         SkillVersion[]
+  
+  // 关联
+  reviews          Review[]
+  purchases        Purchase[]
+  
+  // 特色推荐
+  featured         Boolean @default(false)
+  featuredAt       DateTime?
+  
+  // 审核
+  reviewedAt       DateTime?
+  reviewedBy       String?
+  rejectionReason  String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([status])
+  @@index([categoryId])
+  @@index([developerId])
+  @@index([featured])
+  @@map("skills")
+}
+
+model SkillCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  icon        String?
+  color       String?
+  sortOrder   Int @default(0)
+  
+  skills      Skill[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("skill_categories")
+}
+
+model SkillTag {
+  id     String @id @default(cuid())
+  name   String @unique
+  slug   String @unique
+  
+  skills Skill[]
+  
+  @@map("skill_tags")
+}
+
+model SkillVersion {
+  id          String   @id @default(cuid())
+  skillId     String
+  skill       Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  
+  version     String
+  changelog   String?  @db.Text
+  downloadUrl String?
+  
+  createdAt   DateTime @default(now())
+  
+  @@unique([skillId, version])
+  @@map("skill_versions")
+}
+
+// ==================== 评价相关 ====================
+
+model Review {
+  id        String   @id @default(cuid())
+  
+  skillId   String
+  skill     Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  rating    Int      // 1-5
+  title     String?
+  content   String   @db.Text
+  
+  // 验证购买
+  verifiedPurchase Boolean @default(false)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@unique([skillId, userId])
+  @@map("reviews")
+}
+
+// ==================== 交易相关 ====================
+
+enum PurchaseStatus {
+  PENDING
+  COMPLETED
+  REFUNDED
+  CANCELLED
+}
+
+model Purchase {
+  id        String   @id @default(cuid())
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  skillId   String
+  skill     Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  
+  status    PurchaseStatus @default(PENDING)
+  
+  // 价格快照
+  price     Decimal @db.Decimal(10, 2)
+  currency  String @default("USD")
+  
+  // Stripe
+  stripePaymentIntentId String?
+  stripeChargeId        String?
+  
+  // 佣金
+  platformFee   Decimal @db.Decimal(10, 2)
+  developerShare Decimal @db.Decimal(10, 2)
+  
+  // 退款
+  refundedAt    DateTime?
+  refundReason  String?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("purchases")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  PAST_DUE
+  UNPAID
+  TRIALING
+}
+
+model Subscription {
+  id        String   @id @default(cuid())
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  skillId   String
+  
+  status    SubscriptionStatus @default(TRIALING)
+  
+  // Stripe
+  stripeSubscriptionId String @unique
+  stripePriceId        String
+  stripeCustomerId     String
+  
+  // 周期
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  
+  // 取消
+  cancelAtPeriodEnd Boolean @default(false)
+  cancelledAt       DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("subscriptions")
+}
+
+// 开发者提现
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Payout {
+  id        String   @id @default(cuid())
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  amount    Decimal @db.Decimal(10, 2)
+  currency  String @default("USD")
+  
+  status    PayoutStatus @default(PENDING)
+  
+  // Stripe
+  stripeTransferId String?
+  
+  // 失败原因
+  failureMessage String?
+  
+  processedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("payouts")
+}
+
+// ==================== API 相关 ====================
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name      String
+  key       String   @unique
+  
+  // 限制
+  rateLimitPerMinute Int @default(60)
+  monthlyQuota       Int @default(1000)
+  
+  // 使用统计
+  totalRequests Int @default(0)
+  
+  // 状态
+  isActive  Boolean @default(true)
+  expiresAt DateTime?
+  lastUsedAt DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // 使用记录
+  usageLogs ApiUsageLog[]
+  
+  @@map("api_keys")
+}
+
+model ApiUsageLog {
+  id        String   @id @default(cuid())
+  
+  apiKeyId  String
+  apiKey    ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  
+  skillId   String?
+  endpoint  String
+  method    String
+  statusCode Int
+  responseTime Int // ms
+  
+  createdAt DateTime @default(now())
+  
+  @@index([apiKeyId])
+  @@index([createdAt])
+  @@map("api_usage_logs")
+}
+
+// ==================== 系统配置 ====================
+
+model SystemConfig {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("system_configs")
+}
