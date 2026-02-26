@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://powerskills.store">Live Demo</a> •
+  <a href="https://powerskills.vercel.app/">Live Demo</a> •
   <a href="#features">Features</a> •
   <a href="#installation">Installation</a> •
   <a href="#tech-stack">Tech Stack</a> •
