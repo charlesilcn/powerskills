@@ -13,10 +13,8 @@
 
 <p align="center">
   <a href="https://powerskills.vercel.app/">Live Demo</a> •
-  <a href="#features">Features</a> •
-  <a href="#installation">Installation</a> •
-  <a href="#tech-stack">Tech Stack</a> •
-  <a href="#contributing">Contributing</a>
+  <a href="https://www.bilibili.com/video/BV1ZrfMBYEtz/?share_source=copy_web&vd_source=3dc4ad3c49c082466abbc752d24bf668">Recording Video</a> •
+
 </p>
 
 ---
